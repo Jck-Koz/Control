@@ -131,6 +131,7 @@ class BaseWindow(QMainWindow):
     def closeEvent(self, event):
         try:
             close_connection(self.db_connection)
+            print("Database connection closed.")
         except Exception as e:
             print("Error al cerrar la conexión de la base de datos:", e)
         event.accept()

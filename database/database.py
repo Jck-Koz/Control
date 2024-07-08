@@ -10,7 +10,8 @@ def create_connection():
     if connection is None or not connection.is_connected():
         try:
             connection = mysql.connector.connect(
-               
+
+             
             )
             if connection.is_connected():
                 print("Connected to MySQL database")
@@ -19,9 +20,12 @@ def create_connection():
     return connection
 
 
-def close_connection():
+def close_connection(conn=None):
     global connection
-    if connection and connection.is_connected():
+    if conn and conn.is_connected():
+        conn.close()
+        print("MySQL connection is closed")
+    elif connection and connection.is_connected():
         connection.close()
         connection = None
         print("MySQL connection is closed")
@@ -31,5 +35,3 @@ def check_connection(conn):
     if conn is None or not conn.is_connected():
         conn = create_connection()
     return conn
-
-        
