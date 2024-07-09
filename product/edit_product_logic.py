@@ -2,6 +2,7 @@ import mysql.connector
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel
 from .editprod import Ui_EditProductWindow
 from database.database import create_connection, close_connection, check_connection
+from datetime import datetime
 
 
 class EditProductLogic(QMainWindow):
@@ -12,7 +13,8 @@ class EditProductLogic(QMainWindow):
         self.db_connection = create_connection()
         self.main_window = main_window  # Referencia a la ventana principal
         self.product_id = product_id
-        self.user_id = 1  # Id del usuario que está realizando la operación
+        # Id del usuario que está realizando la operación
+        self.user_id = main_window.user_id
         self.populate_comboboxes()
         self.load_product_details()
 
@@ -64,6 +66,20 @@ class EditProductLogic(QMainWindow):
                 WHERE p.id_producto = %s
             """, (self.product_id,))
             product = cursor.fetchone()
+            if not product:
+                cursor.execute("""
+                    SELECT p.nombre_producto, p.descripcion, p.precio, p.codigo_barras, c.nombre_categoria, m.nombre_marca, 
+                           pr.nombre_proveedor, COALESCE(ii.cantidad, 0), COALESCE(ii.porcentaje_operacion, 0), COALESCE(i.nombre_inventario, '')
+                    FROM productos p
+                    JOIN categorias c ON p.id_categoria = c.id_categoria
+                    JOIN marcas m ON p.id_marca = m.id_marca
+                    JOIN proveedores pr ON p.id_proveedor = pr.id_proveedor
+                    LEFT JOIN inventario_interno ii ON p.id_producto = ii.id_producto
+                    LEFT JOIN inventarios i ON ii.id_inventario = i.id_inventario
+                    WHERE p.id_producto = %s
+                """, (self.product_id,))
+                product = cursor.fetchone()
+
             if product:
                 self.ui.nombreInput.setText(product[0])
                 self.ui.descripcionInput.setText(product[1])
@@ -72,8 +88,8 @@ class EditProductLogic(QMainWindow):
                 self.ui.categoriaInput.setCurrentText(product[4])
                 self.ui.marcaInput.setCurrentText(product[5])
                 self.ui.proveedorInput.setCurrentText(product[6])
-                self.ui.cantidadInput.setValue(
-                    product[7] if product[7] is not None else 0)
+                # Mostrar siempre 1 en la interfaz
+                self.ui.cantidadInput.setValue(1)
                 self.ui.porcentajeOperacionInput.setText(
                     str(product[8]) if product[8] is not None else '0.0')
                 self.ui.inventarioInput.setCurrentText(product[9])
@@ -87,7 +103,7 @@ class EditProductLogic(QMainWindow):
     def update_inventory_entry(self):
         try:
             cantidad = self.ui.cantidadInput.value()
-            id_inventario = self.ui.inventarioInput.currentIndex() + 1
+            id_inventario = self.get_inventario_id()
             cursor = self.db_connection.cursor()
             cursor.execute("SELECT cantidad FROM inventario_producto WHERE id_producto = %s AND id_inventario = %s",
                            (self.product_id, id_inventario))
@@ -103,12 +119,14 @@ class EditProductLogic(QMainWindow):
                 """, (id_inventario, self.product_id, cantidad, float(self.ui.porcentajeOperacionInput.text())))
             self.db_connection.commit()
             cursor.execute("""
-                INSERT INTO ventas_internas (id_producto, id_usuario, cantidad, porcentaje_venta, id_inventario, tipo)
-                VALUES (%s, %s, %s, %s, %s, 'entrada')
-            """, (self.product_id, self.user_id, cantidad, float(self.ui.porcentajeOperacionInput.text()), id_inventario))
+                INSERT INTO ventas (id_producto, id_usuario, cantidad, porcentaje_venta, fecha_venta, id_inventario, tipo)
+                VALUES (%s, %s, %s, %s, %s, %s, 'entrada')
+            """, (self.product_id, self.user_id, cantidad, float(self.ui.porcentajeOperacionInput.text()),
+                  datetime.now().strftime("%Y-%m-%d %H:%M:%S"), id_inventario))
             self.db_connection.commit()
             # Actualizar la tabla de productos en la ventana principal
             self.main_window.load_products_table()
+            self.main_window.load_combined_sales_table()
             QMessageBox.information(
                 self, "Éxito", "Entrada de inventario actualizada exitosamente.")
         except mysql.connector.Error as err:
@@ -119,7 +137,7 @@ class EditProductLogic(QMainWindow):
     def update_inventory_exit(self):
         try:
             cantidad = self.ui.cantidadInput.value()
-            id_inventario = self.ui.inventarioInput.currentIndex() + 1
+            id_inventario = self.get_inventario_id()
             cursor = self.db_connection.cursor()
             cursor.execute("SELECT cantidad FROM inventario_producto WHERE id_producto = %s AND id_inventario = %s",
                            (self.product_id, id_inventario))
@@ -130,12 +148,14 @@ class EditProductLogic(QMainWindow):
                                (nueva_cantidad, self.product_id, id_inventario))
                 self.db_connection.commit()
                 cursor.execute("""
-                    INSERT INTO ventas_internas (id_producto, id_usuario, cantidad, porcentaje_venta, id_inventario, tipo)
-                    VALUES (%s, %s, %s, %s, %s, 'salida')
-                """, (self.product_id, self.user_id, cantidad, float(self.ui.porcentajeOperacionInput.text()), id_inventario))
+                    INSERT INTO ventas (id_producto, id_usuario, cantidad, porcentaje_venta, fecha_venta, id_inventario, tipo)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'salida')
+                """, (self.product_id, self.user_id, cantidad, float(self.ui.porcentajeOperacionInput.text()),
+                      datetime.now().strftime("%Y-%m-%d %H:%M:%S"), id_inventario))
                 self.db_connection.commit()
                 # Actualizar la tabla de productos en la ventana principal
                 self.main_window.load_products_table()
+                self.main_window.load_combined_sales_table()
                 QMessageBox.information(
                     self, "Éxito", "Salida de inventario actualizada exitosamente.")
             else:
@@ -145,6 +165,13 @@ class EditProductLogic(QMainWindow):
             print("Error al actualizar la salida de inventario:", err)
             QMessageBox.warning(
                 self, "Error", f"Error al actualizar la salida de inventario: {err}")
+
+    def get_inventario_id(self):
+        cursor = self.db_connection.cursor()
+        cursor.execute(
+            "SELECT id_inventario FROM inventarios WHERE nombre_inventario = %s", (self.ui.inventarioInput.currentText(),))
+        result = cursor.fetchone()
+        return result[0] if result else None
 
     def add_category(self):
         dialog = QDialog(self)
@@ -236,6 +263,4 @@ class EditProductLogic(QMainWindow):
             print("Database connection closed.")
         except Exception as e:
             print("Error al cerrar la conexión de la base de datos:", e)
-            QMessageBox.warning(
-                self, "Error", f"Error al cerrar la conexión de la base de datos: {e}")
         event.accept()

@@ -53,7 +53,7 @@ class LoginWindow(QMainWindow):
                 if bcrypt.checkpw(password.encode(), hashed_password.encode()):
                     print("Password match. Redirecting user...")
                     self.remember_credentials(username, password)
-                    self.redirect_user(role_id)
+                    self.redirect_user(role_id, user_id)
                 else:
                     print("Password mismatch.")
                     QMessageBox.warning(
@@ -86,7 +86,7 @@ class LoginWindow(QMainWindow):
             print("Error al guardar las credenciales:", e)
             traceback.print_exc()
 
-    def redirect_user(self, role_id):
+    def redirect_user(self, role_id, user_id):
         try:
             cursor = self.db_connection.cursor()
             cursor.execute(
@@ -94,7 +94,7 @@ class LoginWindow(QMainWindow):
             role = cursor.fetchone()[0]
             print(f"Redirecting user with role: {role}")
 
-            self.main_window = BaseWindow(role)
+            self.main_window = BaseWindow(role_id, user_id)
             self.main_window.show()
             print("Main window should now be visible.")
             self.close()

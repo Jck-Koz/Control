@@ -1,5 +1,6 @@
 import mysql.connector
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QDialog, QVBoxLayout, QLineEdit, QPushButton, QLabel
+from datetime import datetime
 from .addprod import Ui_AddProductWindow
 from database.database import create_connection, close_connection, check_connection
 
@@ -90,17 +91,26 @@ class AddProductLogic(QMainWindow):
                     INSERT INTO inventario_producto (id_producto, id_inventario, cantidad, porcentaje_operacion)
                     VALUES (%s, %s, %s, %s)
                 """, (id_producto, id_inventario, cantidad, porcentaje_operacion))
+                cursor.execute("""
+                    INSERT INTO ventas (id_producto, id_usuario, cantidad, porcentaje_venta, fecha_venta, id_inventario, tipo)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'entrada')
+                """, (id_producto, self.main_window.user_id, cantidad, porcentaje_operacion, datetime.now(), id_inventario))
             else:
                 cursor.execute("""
-                    INSERT INTO inventario_interno (id_producto, id_inventario_interno, id_inventario, cantidad, porcentaje_operacion)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (id_producto, id_inventario, id_inventario, cantidad, porcentaje_operacion))
+                    INSERT INTO inventario_interno (id_producto, id_inventario, cantidad, porcentaje_operacion)
+                    VALUES (%s, %s, %s, %s)
+                """, (id_producto, id_inventario, cantidad, porcentaje_operacion))
+                cursor.execute("""
+                    INSERT INTO ventas_internas (id_producto, id_usuario, cantidad, porcentaje_venta, fecha_venta, id_inventario, tipo)
+                    VALUES (%s, %s, %s, %s, %s, %s, 'entrada')
+                """, (id_producto, self.main_window.user_id, cantidad, porcentaje_operacion, datetime.now(), id_inventario))
 
             self.db_connection.commit()
             QMessageBox.information(
                 self, "Éxito", "Producto agregado exitosamente.")
             # Actualizar la tabla de productos en la ventana principal
             self.main_window.load_products_table()
+            self.main_window.load_combined_sales_table()
             self.close()
         except mysql.connector.Error as err:
             print(f"Error al agregar el producto: {err}")
