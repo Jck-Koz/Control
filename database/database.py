@@ -11,11 +11,7 @@ def create_connection():
         try:
             connection = mysql.connector.connect(
 
-                host="gtxm1039.siteground.biz",
-                user="ucpdpxlnnhnhz",
-                password="Toplevel1977",
-                # Aquí deberás proporcionar los parámetros de conexión correctos
-                database="dbjyjpt9dogal5"
+               
             )
             if connection.is_connected():
                 print("Connected to MySQL database")
